@@ -11,6 +11,7 @@ import (
 	"github.com/alfascuf/currency-service/internal/config"
 	"github.com/alfascuf/currency-service/internal/handler"
 	"github.com/alfascuf/currency-service/internal/repository"
+	"github.com/alfascuf/currency-service/internal/service"
 )
 
 func main() {
@@ -39,10 +40,14 @@ func main() {
 	}
 	log.Println("Database tables created successfully")
 
+	svc := service.New(repo)
+	h := handler.New(svc)
+
 	// Настройка роутов
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", handler.Health)
-	mux.HandleFunc("/api/v1/rates", handler.GetRate)
+	mux.HandleFunc("/health", h.Health)
+	mux.HandleFunc("/api/v1/rates", h.GetRate)
+	mux.HandleFunc("/api/v1/rates/history", h.GetHistory)
 
 	// Создание HTTP сервера
 	srv := &http.Server{
@@ -54,5 +59,9 @@ func main() {
 	}
 
 	log.Printf("Currency service started on port %s\n", cfg.Port)
+	log.Printf("📋 Available endpoints:")
+	log.Printf("   GET  /health")
+	log.Printf("   GET  /api/v1/rates?base=RUB&target=USD&date=2026-01-20")
+	log.Printf("   GET  /api/v1/rates/history?base=RUB&target=USD&start_date=2026-01-01&end_date=2026-01-31")
 	log.Fatal(srv.ListenAndServe())
 }

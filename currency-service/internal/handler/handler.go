@@ -3,37 +3,58 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
+
+	"github.com/alfascuf/currency-service/internal/models"
+	"github.com/alfascuf/currency-service/internal/service"
 )
 
-func Health(w http.ResponseWriter, r *http.Request) {
+type Handler struct {
+	srv service.Service
+}
+
+func New(srv service.Service) *Handler {
+	return &Handler{srv: srv}
+}
+
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
 
-func GetRate(w http.ResponseWriter, r *http.Request) {
-	type Response struct {
-		Base   string `json:"base"`
-		Target string `json:"target"`
-		Date   string `json:"date"`
-		Rate   string `json:"rate"`
-		Note   string `json:"note"`
+func (h *Handler) GetRate(w http.ResponseWriter, r *http.Request) {
+	// Парсим query параметры
+	req := &models.GetRateRequest{
+		Base:   strings.TrimSpace(r.URL.Query().Get("base")),
+		Target: strings.TrimSpace(r.URL.Query().Get("target")),
+		Date:   strings.TrimSpace(r.URL.Query().Get("date")),
 	}
 
-	base := r.URL.Query().Get("base")
-	target := r.URL.Query().Get("target")
-	date := r.URL.Query().Get("date")
-
-	if base == "" || target == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "base or target required"})
+	// Вызываем service слой
+	resp, err := h.srv.GetRate(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	resp := Response{
-		Base:   base,
-		Target: target,
-		Date:   date,
-		Note:   "stub: data not loaded yet",
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
+	// Парсим query параметры
+	req := &models.GetHistoryRequest{
+		Base:      strings.TrimSpace(r.URL.Query().Get("base")),
+		Target:    strings.TrimSpace(r.URL.Query().Get("target")),
+		StartDate: strings.TrimSpace(r.URL.Query().Get("start_date")),
+		EndDate:   strings.TrimSpace(r.URL.Query().Get("end_date")),
+	}
+
+	// Вызываем service слой
+	resp, err := h.srv.GetHistory(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
