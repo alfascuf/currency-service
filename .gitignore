@@ -42,6 +42,6 @@ Thumbs.db
 # Logs
 *.log
 
-# Compiled binaries
-currency-service/
-gateway-service/
+## Compiled binaries
+#currency-service/
+#gateway-service/
