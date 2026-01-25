@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/alfascuf/currency-service/internal/handler"
 	"github.com/alfascuf/currency-service/internal/repository"
 	"github.com/alfascuf/currency-service/internal/service"
+	"github.com/alfascuf/currency-service/internal/worker"
 )
 
 func main() {
@@ -21,6 +23,7 @@ func main() {
 		cfg.Port, cfg.BaseCurrency, cfg.DatabaseDriver)
 
 	// Подключение к PostgreSQL
+
 	db, err := sql.Open(cfg.DatabaseDriver, cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -39,6 +42,15 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	log.Println("Database tables created successfully")
+	// worker
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := worker.NewWorker(repo, cfg.CurrencyAPIURL, cfg.BaseCurrency)
+
+	if err := w.Start(ctx); err != nil {
+		log.Fatalf("Failed to start worker: %v", err)
+	}
+	defer w.Stop()
 
 	svc := service.New(repo)
 	h := handler.New(svc)

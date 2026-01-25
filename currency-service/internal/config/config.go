@@ -13,6 +13,7 @@ type Config struct {
 	BaseCurrency   string
 	DatabaseURL    string
 	DatabaseDriver string
+	CurrencyAPIURL string
 }
 
 func Load() *Config {
@@ -26,6 +27,7 @@ func Load() *Config {
 		BaseCurrency:   getEnv("BASE_CURRENCY", "USD"),
 		DatabaseURL:    getEnv("DATABASE_URL", "currency.db"),
 		DatabaseDriver: getEnv("DATABASE_DRIVER", "postgres"),
+		CurrencyAPIURL: getEnv("CURRENCY_API_URL", "https://api.frankfurter.dev"),
 	}
 	return cfg
 }
