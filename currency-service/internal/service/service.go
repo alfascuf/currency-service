@@ -8,6 +8,8 @@ import (
 	"github.com/alfascuf/currency-service/internal/repository"
 )
 
+const baseCurrency = "RUB" // Базовая валюта для кросс-конвертации
+
 type Service interface {
 	GetRate(req *models.GetRateRequest) (*models.GetRateResponse, error)
 	GetHistory(req *models.GetHistoryRequest) (*models.GetHistoryResponse, error)
@@ -29,6 +31,16 @@ func (s *service) GetRate(req *models.GetRateRequest) (*models.GetRateResponse, 
 		}, nil
 	}
 
+	// Если base == target, курс = 1
+	if req.Base == req.Target {
+		return &models.GetRateResponse{
+			Base:   req.Base,
+			Target: req.Target,
+			Rate:   1.0,
+			Date:   req.Date,
+		}, nil
+	}
+
 	// Парсим дату
 	date, err := time.Parse("2006-01-02", req.Date)
 	if err != nil {
@@ -37,20 +49,64 @@ func (s *service) GetRate(req *models.GetRateRequest) (*models.GetRateResponse, 
 		}, nil
 	}
 
-	// Получаем курс из БД
-	rate, err := s.repo.GetRate(req.Base, req.Target, date)
+	// Вычисляем курс
+	rate, err := s.calculateRate(req.Base, req.Target, date)
 	if err != nil {
 		return &models.GetRateResponse{
-			Error: fmt.Sprintf("rate not found: %v", err),
+			Error: err.Error(),
 		}, nil
 	}
 
 	return &models.GetRateResponse{
-		Base:   rate.Base,
-		Target: rate.Target,
-		Rate:   rate.Rate,
-		Date:   rate.Date.Format("2006-01-02"),
+		Base:   req.Base,
+		Target: req.Target,
+		Rate:   rate,
+		Date:   req.Date,
 	}, nil
+}
+
+// calculateRate - универсальная конвертация любой пары через RUB
+func (s *service) calculateRate(base, target string, date time.Time) (float64, error) {
+	// Случай 1: Прямой курс (RUB → USD)
+	if base == baseCurrency {
+		rate, err := s.repo.GetRate(base, target, date)
+		if err != nil {
+			return 0, fmt.Errorf("rate not found for %s/%s on %s", base, target, date.Format("2006-01-02"))
+		}
+		return rate.Rate, nil
+	}
+
+	// Случай 2: Обратный курс (USD → RUB)
+	if target == baseCurrency {
+		rate, err := s.repo.GetRate(baseCurrency, base, date)
+		if err != nil {
+			return 0, fmt.Errorf("rate not found for %s/%s on %s", base, target, date.Format("2006-01-02"))
+		}
+		// Инверсия: если 1 RUB = 0.0131 USD, то 1 USD = 1/0.0131 RUB
+		return 1.0 / rate.Rate, nil
+	}
+
+	// Случай 3: Кросс-конвертация (USD → EUR через RUB)
+	// USD → EUR = (USD → RUB) × (RUB → EUR)
+
+	// Получаем RUB → base (например, RUB → USD)
+	baseRate, err := s.repo.GetRate(baseCurrency, base, date)
+	if err != nil {
+		return 0, fmt.Errorf("rate not found for %s/%s on %s", baseCurrency, base, date.Format("2006-01-02"))
+	}
+
+	// Получаем RUB → target (например, RUB → EUR)
+	targetRate, err := s.repo.GetRate(baseCurrency, target, date)
+	if err != nil {
+		return 0, fmt.Errorf("rate not found for %s/%s on %s", baseCurrency, target, date.Format("2006-01-02"))
+	}
+
+	// Вычисляем кросс-курс:
+	// USD → RUB = 1 / (RUB → USD)
+	// USD → EUR = (USD → RUB) × (RUB → EUR) = (1 / baseRate) × targetRate
+	crossRate := targetRate.Rate / baseRate.Rate
+
+	return crossRate, nil
 }
 
 func (s *service) GetHistory(req *models.GetHistoryRequest) (*models.GetHistoryResponse, error) {
@@ -74,10 +130,11 @@ func (s *service) GetHistory(req *models.GetHistoryRequest) (*models.GetHistoryR
 		}, nil
 	}
 
-	history, err := s.repo.GetHistory(req.Base, req.Target, startDate, endDate)
+	// Для истории тоже используем кросс-конвертацию
+	history, err := s.calculateHistory(req.Base, req.Target, startDate, endDate)
 	if err != nil {
 		return &models.GetHistoryResponse{
-			Error: fmt.Sprintf("failed to get history: %v", err),
+			Error: err.Error(),
 		}, nil
 	}
 
@@ -86,6 +143,68 @@ func (s *service) GetHistory(req *models.GetHistoryRequest) (*models.GetHistoryR
 		Target: req.Target,
 		Data:   history,
 	}, nil
+}
+
+// calculateHistory - история для любой пары через RUB
+func (s *service) calculateHistory(base, target string, startDate, endDate time.Time) ([]models.ExchangeRate, error) {
+	// Случай 1: Прямой курс (RUB → USD)
+	if base == baseCurrency {
+		return s.repo.GetHistory(base, target, startDate, endDate)
+	}
+
+	// Случай 2: Обратный курс (USD → RUB)
+	if target == baseCurrency {
+		history, err := s.repo.GetHistory(baseCurrency, base, startDate, endDate)
+		if err != nil {
+			return nil, err
+		}
+		// Инвертируем каждый курс
+		for i := range history {
+			history[i].Base = base
+			history[i].Target = target
+			history[i].Rate = 1.0 / history[i].Rate
+		}
+		return history, nil
+	}
+
+	// Случай 3: Кросс-конвертация (USD → EUR)
+	baseHistory, err := s.repo.GetHistory(baseCurrency, base, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("history not found for %s/%s", baseCurrency, base)
+	}
+
+	targetHistory, err := s.repo.GetHistory(baseCurrency, target, startDate, endDate)
+	if err != nil {
+		return nil, fmt.Errorf("history not found for %s/%s", baseCurrency, target)
+	}
+
+	// Создаём map для быстрого поиска по дате
+	targetMap := make(map[string]float64)
+	for _, rate := range targetHistory {
+		dateKey := rate.Date.Format("2006-01-02")
+		targetMap[dateKey] = rate.Rate
+	}
+
+	// Вычисляем кросс-курс для каждой даты
+	var result []models.ExchangeRate
+	for _, baseRate := range baseHistory {
+		dateKey := baseRate.Date.Format("2006-01-02")
+		targetRate, exists := targetMap[dateKey]
+		if !exists {
+			continue // Пропускаем дату, если нет данных
+		}
+
+		result = append(result, models.ExchangeRate{
+			Base:      base,
+			Target:    target,
+			Rate:      targetRate / baseRate.Rate,
+			Date:      baseRate.Date,
+			CreatedAt: baseRate.CreatedAt,
+			UpdatedAt: baseRate.UpdatedAt,
+		})
+	}
+
+	return result, nil
 }
 
 func (s *service) SaveRate(rate *models.ExchangeRate) error {
