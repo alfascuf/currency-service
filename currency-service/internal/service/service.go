@@ -130,11 +130,11 @@ func (s *service) GetHistory(req *models.GetHistoryRequest) (*models.GetHistoryR
 		}, nil
 	}
 
-	// Для истории тоже используем кросс-конвертацию
+	// Универсальная история через RUB
 	history, err := s.calculateHistory(req.Base, req.Target, startDate, endDate)
 	if err != nil {
 		return &models.GetHistoryResponse{
-			Error: err.Error(),
+			Error: fmt.Sprintf("failed to get history: %v", err),
 		}, nil
 	}
 
@@ -145,16 +145,18 @@ func (s *service) GetHistory(req *models.GetHistoryRequest) (*models.GetHistoryR
 	}, nil
 }
 
-// calculateHistory - история для любой пары через RUB
+// НОВЫЙ метод для кросс-истории
 func (s *service) calculateHistory(base, target string, startDate, endDate time.Time) ([]models.ExchangeRate, error) {
+	const rub = "RUB"
+
 	// Случай 1: Прямой курс (RUB → USD)
-	if base == baseCurrency {
+	if base == rub {
 		return s.repo.GetHistory(base, target, startDate, endDate)
 	}
 
 	// Случай 2: Обратный курс (USD → RUB)
-	if target == baseCurrency {
-		history, err := s.repo.GetHistory(baseCurrency, base, startDate, endDate)
+	if target == rub {
+		history, err := s.repo.GetHistory(rub, base, startDate, endDate)
 		if err != nil {
 			return nil, err
 		}
@@ -167,34 +169,35 @@ func (s *service) calculateHistory(base, target string, startDate, endDate time.
 		return history, nil
 	}
 
-	// Случай 3: Кросс-конвертация (USD → EUR)
-	baseHistory, err := s.repo.GetHistory(baseCurrency, base, startDate, endDate)
+	// Случай 3: Кросс-конвертация (USD → EUR через RUB)
+	rubToBase, err := s.repo.GetHistory(rub, base, startDate, endDate)
 	if err != nil {
-		return nil, fmt.Errorf("history not found for %s/%s", baseCurrency, base)
+		return nil, fmt.Errorf("no history for %s/%s", rub, base)
 	}
 
-	targetHistory, err := s.repo.GetHistory(baseCurrency, target, startDate, endDate)
+	rubToTarget, err := s.repo.GetHistory(rub, target, startDate, endDate)
 	if err != nil {
-		return nil, fmt.Errorf("history not found for %s/%s", baseCurrency, target)
+		return nil, fmt.Errorf("no history for %s/%s", rub, target)
 	}
 
 	// Создаём map для быстрого поиска по дате
 	targetMap := make(map[string]float64)
-	for _, rate := range targetHistory {
+	for _, rate := range rubToTarget {
 		dateKey := rate.Date.Format("2006-01-02")
 		targetMap[dateKey] = rate.Rate
 	}
 
 	// Вычисляем кросс-курс для каждой даты
 	var result []models.ExchangeRate
-	for _, baseRate := range baseHistory {
+	for _, baseRate := range rubToBase {
 		dateKey := baseRate.Date.Format("2006-01-02")
 		targetRate, exists := targetMap[dateKey]
 		if !exists {
-			continue // Пропускаем дату, если нет данных
+			continue
 		}
 
 		result = append(result, models.ExchangeRate{
+			ID:        0, // ID не нужен для истории
 			Base:      base,
 			Target:    target,
 			Rate:      targetRate / baseRate.Rate,
