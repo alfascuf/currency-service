@@ -9,8 +9,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// Repository provides data access layer for currency operations
 type Repository interface {
-	InitDB() error
 	SaveRate(rate *models.ExchangeRate) error
 	GetRate(base, target string, date time.Time) (*models.ExchangeRate, error)
 	GetHistory(base, target string, startDate, endDate time.Time) ([]models.ExchangeRate, error)
@@ -21,37 +21,12 @@ type repository struct {
 	db *sql.DB
 }
 
+// New creates a new Repository instance
 func New(db *sql.DB) Repository {
 	return &repository{db: db}
 }
 
-// InitDB создает таблицы при старте сервиса
-func (r *repository) InitDB() error {
-	query := `
-	CREATE TABLE IF NOT EXISTS exchange_rates (
-		id SERIAL PRIMARY KEY,
-		base VARCHAR(10) NOT NULL,
-		target VARCHAR(10) NOT NULL,
-		rate DECIMAL(20, 6) NOT NULL,
-		date DATE NOT NULL,
-		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		UNIQUE(base, target, date)
-	);
-
-	CREATE INDEX IF NOT EXISTS idx_base_target_date 
-	ON exchange_rates(base, target, date);
-	`
-
-	_, err := r.db.Exec(query)
-	if err != nil {
-		return fmt.Errorf("failed to create tables: %w", err)
-	}
-
-	return nil
-}
-
-// SaveRate сохраняет курс в БД (или обновляет, если уже есть)
+// SaveRate saves or updates exchange rate in database
 func (r *repository) SaveRate(rate *models.ExchangeRate) error {
 	query := `
 	INSERT INTO exchange_rates (base, target, rate, date, created_at, updated_at)
@@ -80,7 +55,7 @@ func (r *repository) SaveRate(rate *models.ExchangeRate) error {
 	return nil
 }
 
-// GetRate получает курс на конкретную дату
+// GetRate retrieves exchange rate for specific currency pair and date
 func (r *repository) GetRate(base, target string, date time.Time) (*models.ExchangeRate, error) {
 	query := `
 	SELECT id, base, target, rate, date, created_at, updated_at
@@ -111,7 +86,7 @@ func (r *repository) GetRate(base, target string, date time.Time) (*models.Excha
 	return rate, nil
 }
 
-// GetHistory получает историю курсов за период
+// GetHistory retrieves historical exchange rates for date range
 func (r *repository) GetHistory(base, target string, startDate, endDate time.Time) ([]models.ExchangeRate, error) {
 	query := `
 	SELECT id, base, target, rate, date, created_at, updated_at
@@ -151,7 +126,7 @@ func (r *repository) GetHistory(base, target string, startDate, endDate time.Tim
 	return rates, nil
 }
 
-// Close закрывает соединение с БД
+// Close closes the database connection
 func (r *repository) Close() error {
 	return r.db.Close()
 }

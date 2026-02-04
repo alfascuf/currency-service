@@ -1,0 +1,100 @@
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: currency_db
+    environment:
+      POSTGRES_DB: currency_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 90029002
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - currency-network
+
+  migrator:
+    build:
+      context: .
+      dockerfile: deployment/migrator.dockerfile
+    container_name: currency-migrator
+    environment:
+      DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
+      DATABASE_DRIVER: "postgres"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"  # Запускается один раз
+    networks:
+      - currency-network
+  # ============================================
+  # Currency API Service
+  # ============================================
+  currency-api:
+    build:
+      context: .
+      dockerfile: deployment/api.dockerfile
+    container_name: currency_api
+    ports:
+      - "8082:8082"
+    environment:
+      PORT: 8082
+      EXCHANGE_API_KEY: 9c6542ec9e89a700eaaf6a4d
+      BASE_CURRENCY: RUB
+      DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
+      DATABASE_DRIVER: postgres
+      CURRENCY_API_URL: https://api.exchangerate-api.com/v4
+      ENVIRONMENT: production
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - currency-network
+
+  # ============================================
+  # Currency Worker Service
+  # ============================================
+  currency-worker:
+    build:
+      context: .
+      dockerfile: deployment/worker.dockerfile
+    container_name: currency_worker
+    environment:
+      CURRENCY_API_URL: https://api.exchangerate-api.com/v4
+      EXCHANGE_API_KEY: 9c6542ec9e89a700eaaf6a4d
+      BASE_CURRENCY: RUB
+      DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
+      DATABASE_DRIVER: postgres
+      ENVIRONMENT: production
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - currency-network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  currency-network:
+    driver: bridge

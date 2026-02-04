@@ -1,0 +1,51 @@
+# golangci-lint configuration
+run:
+  timeout: 5m
+
+  # Не используем deprecated опции skip-dirs и skip-files
+  # Используем issues.exclude-dirs и issues.exclude-files
+
+output:
+  # Обновлённая опция (было output.format, стало output.formats)
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true
+
+linters:
+  enable:
+    - errcheck       # Проверяет что все ошибки обработаны
+    - gosimple       # Упрощение кода
+    - govet          # Стандартный анализатор Go
+    - ineffassign    # Неэффективные присваивания
+    - staticcheck    # Статические проверки
+    - unused         # Неиспользуемые переменные/функции
+    - gofmt          # Форматирование
+    - goimports      # Импорты
+    - misspell       # Опечатки в комментариях
+    - bodyclose      # HTTP response body должен закрываться
+    - unconvert      # Ненужные конвертации
+
+linters-settings:
+  errcheck:
+    exclude-functions:
+      - (io.Closer).Close
+      - (*go.uber.org/zap.Logger).Sync
+
+  gocyclo:
+    min-complexity: 15
+
+issues:
+  # Используем новые опции вместо deprecated
+  exclude-dirs:
+    - vendor
+    - .idea
+    - .vscode
+
+  exclude-files:
+    - ".*\\.pb\\.go$"
+
+  exclude-use-default: true
+  max-issues-per-linter: 0
+  max-same-issues: 0

@@ -13,9 +13,9 @@ type ExchangeRate struct {
 }
 
 type GetRateRequest struct {
-	Base   string `json:"base"`
-	Target string `json:"target"`
-	Date   string `json:"date"`
+	Base   string `json:"base" validate:"required,len=3,alpha"`
+	Target string `json:"target" validate:"required,len=3,alpha"`
+	Date   string `json:"date" validate:"required,datetime=2006-01-02"`
 }
 type GetRateResponse struct {
 	Base   string  `json:"base"`
@@ -26,10 +26,10 @@ type GetRateResponse struct {
 }
 
 type GetHistoryRequest struct {
-	Base      string `json:"base"`
-	Target    string `json:"target"`
-	StartDate string `json:"start_date"`
-	EndDate   string `json:"end_date"`
+	Base      string `json:"base" validate:"required,len=3,alpha"`
+	Target    string `json:"target" validate:"required,len=3,alpha"`
+	StartDate string `json:"start_date" validate:"required,datetime=2006-01-02"`
+	EndDate   string `json:"end_date" validate:"required,datetime=2006-01-02"`
 }
 
 type GetHistoryResponse struct {

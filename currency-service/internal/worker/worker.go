@@ -5,113 +5,226 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
+	"github.com/alfascuf/currency-service/internal/config"
+	"github.com/alfascuf/currency-service/internal/logger"
 	"github.com/alfascuf/currency-service/internal/models"
 	"github.com/alfascuf/currency-service/internal/repository"
-	"github.com/robfig/cron/v3"
+	"go.uber.org/zap"
+)
+
+const (
+	// HTTP client timeouts
+	httpTimeout        = 30 * time.Second
+	httpRetries        = 3
+	retryDelay         = 2 * time.Second
+	maxIdleConnections = 10
 )
 
 type Worker struct {
-	repo         repository.Repository // Используем интерфейс
-	apiURL       string
-	baseCurrency string
-	cron         *cron.Cron
+	config     *config.Config
+	repo       repository.Repository
+	httpClient *http.Client
 }
 
-type FrankfurterResponse struct {
-	Amount float64            `json:"amount"`
-	Base   string             `json:"base"`
-	Date   string             `json:"date"`
-	Rates  map[string]float64 `json:"rates"`
-}
-
-func NewWorker(repo repository.Repository, apiURL, baseCurrency string) *Worker {
-	return &Worker{
-		repo:         repo,
-		apiURL:       apiURL,
-		baseCurrency: baseCurrency,
-		cron:         cron.New(),
-	}
-}
-
-func (w *Worker) Start(ctx context.Context) error {
-	log.Println("Starting currency worker...")
-
-	// Сразу обновляем курсы при старте
-	if err := w.fetchAndUpdateRates(ctx); err != nil {
-		log.Printf("Initial fetch failed: %v", err)
-	}
-
-	// Запускаем обновление каждый день в 00:00
-	_, err := w.cron.AddFunc("0 0 * * *", func() {
-		if err := w.fetchAndUpdateRates(ctx); err != nil {
-			log.Printf("Failed to fetch rates: %v", err)
-		}
-	})
-	if err != nil {
-		return fmt.Errorf("failed to schedule cron job: %w", err)
-	}
-
-	w.cron.Start()
-	log.Println("Currency worker started successfully")
-
-	return nil
-}
-
-func (w *Worker) Stop() {
-	log.Println("Stopping currency worker...")
-	w.cron.Stop()
-}
-
-func (w *Worker) fetchAndUpdateRates(ctx context.Context) error {
-	log.Println("Fetching currency rates...")
-
-	url := fmt.Sprintf("%s/latest?from=%s", w.apiURL, w.baseCurrency)
-
+func New(cfg *config.Config, repo repository.Repository) *Worker {
+	// Configure HTTP client with timeouts and keep-alive
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: httpTimeout,
+		Transport: &http.Transport{
+			MaxIdleConns:        maxIdleConnections,
+			MaxIdleConnsPerHost: maxIdleConnections,
+			IdleConnTimeout:     90 * time.Second,
+			DisableKeepAlives:   false,
+		},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	return &Worker{
+		config:     cfg,
+		repo:       repo,
+		httpClient: client,
+	}
+}
+
+// FetchAndSaveRates fetches currency rates with retry mechanism
+func (w *Worker) FetchAndSaveRates() error {
+	return w.FetchAndSaveRatesWithContext(context.Background())
+}
+
+// FetchAndSaveRatesWithContext fetches currency rates with context support
+func (w *Worker) FetchAndSaveRatesWithContext(ctx context.Context) error {
+	var lastErr error
+
+	// Retry mechanism
+	for attempt := 1; attempt <= httpRetries; attempt++ {
+		// Check if context is cancelled
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("operation cancelled: %w", ctx.Err())
+		default:
+		}
+
+		logger.Log.Info("Fetching currency rates",
+			zap.Int("attempt", attempt),
+			zap.Int("max_attempts", httpRetries),
+		)
+
+		err := w.fetchAndSave(ctx)
+		if err == nil {
+			return nil // Success!
+		}
+
+		lastErr = err
+		logger.Log.Warn("Failed to fetch rates",
+			zap.Error(err),
+			zap.Int("attempt", attempt),
+			zap.Int("max_attempts", httpRetries),
+		)
+
+		// Don't wait after last attempt
+		if attempt < httpRetries {
+			logger.Log.Info("Retrying after delay",
+				zap.Duration("delay", retryDelay),
+			)
+
+			select {
+			case <-time.After(retryDelay):
+			case <-ctx.Done():
+				return fmt.Errorf("operation cancelled during retry: %w", ctx.Err())
+			}
+		}
+	}
+
+	return fmt.Errorf("failed after %d attempts: %w", httpRetries, lastErr)
+}
+
+// fetchAndSave performs the actual API call and database save
+func (w *Worker) fetchAndSave(ctx context.Context) error {
+	// Create request context with timeout
+	reqCtx, cancel := context.WithTimeout(ctx, httpTimeout)
+	defer cancel()
+
+	url := fmt.Sprintf("%s/latest/%s", w.config.CurrencyAPIURL, w.config.BaseCurrency)
+
+	logger.Log.Info("Requesting currency API",
+		zap.String("url", url),
+		zap.String("base_currency", w.config.BaseCurrency),
+		zap.Duration("timeout", httpTimeout),
+	)
+
+	// Create HTTP request with context
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := client.Do(req)
+	// Add User-Agent header
+	req.Header.Set("User-Agent", "Currency-Service/1.0")
+
+	// Execute request
+	resp, err := w.httpClient.Do(req)
 	if err != nil {
+		logger.Log.Error("Failed to fetch rates from API",
+			zap.Error(err),
+			zap.String("url", url),
+		)
 		return fmt.Errorf("failed to fetch rates: %w", err)
 	}
 	defer resp.Body.Close()
 
+	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+		logger.Log.Error("API returned non-200 status",
+			zap.Int("status_code", resp.StatusCode),
+			zap.String("url", url),
+		)
+		return fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	var apiResp FrankfurterResponse
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
+	// Read response with size limit
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024)) // 10MB limit
+	if err != nil {
+		logger.Log.Error("Failed to read response body", zap.Error(err))
+		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Сохраняем курсы в БД
-	for currency, rate := range apiResp.Rates {
-		exchangeRate := &models.ExchangeRate{
-			Base:   apiResp.Base, // Используем Base вместо FromCurrency
-			Target: currency,     // Используем Target вместо ToCurrency
-			Rate:   rate,
-			Date:   time.Now(),
+	// Parse JSON
+	var result struct {
+		Rates map[string]float64 `json:"rates"`
+		Date  string             `json:"date"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		logger.Log.Error("Failed to parse JSON response",
+			zap.Error(err),
+			zap.Int("body_size", len(body)),
+		)
+		return fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	// Validate response
+	if len(result.Rates) == 0 {
+		return fmt.Errorf("no rates returned from API")
+	}
+
+	// Parse date
+	date, err := time.Parse("2006-01-02", result.Date)
+	if err != nil {
+		date = time.Now().UTC()
+	}
+
+	// Save rates to database
+	count := 0
+	errorCount := 0
+
+	for target, rate := range result.Rates {
+		// Check context before each save
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("operation cancelled during save: %w", ctx.Err())
+		default:
 		}
 
-		// Используем SaveRate вместо SaveExchangeRate
-		if err := w.repo.SaveRate(exchangeRate); err != nil {
-			log.Printf("Failed to save rate %s/%s: %v", apiResp.Base, currency, err)
+		err := w.repo.SaveRate(&models.ExchangeRate{
+			Base:   w.config.BaseCurrency,
+			Target: target,
+			Rate:   rate,
+			Date:   date,
+		})
+
+		if err != nil {
+			logger.Log.Warn("Failed to save rate",
+				zap.Error(err),
+				zap.String("base", w.config.BaseCurrency),
+				zap.String("target", target),
+				zap.Float64("rate", rate),
+			)
+			errorCount++
 			continue
 		}
+
+		count++
 	}
 
-	log.Printf("Successfully updated %d currency rates", len(apiResp.Rates))
+	logger.Log.Info("Currency rates update completed",
+		zap.Int("saved", count),
+		zap.Int("errors", errorCount),
+		zap.String("date", result.Date),
+		zap.String("base_currency", w.config.BaseCurrency),
+	)
+
+	if errorCount > 0 && count == 0 {
+		return fmt.Errorf("failed to save any rates: %d errors", errorCount)
+	}
+
 	return nil
+}
+
+// Close closes HTTP client connections
+func (w *Worker) Close() {
+	if w.httpClient != nil {
+		w.httpClient.CloseIdleConnections()
+	}
 }
