@@ -23,8 +23,12 @@ services:
 
   migrator:
     build:
-      context: ./currency-service
-      dockerfile: deployment/migrator.dockerfile
+      context: .
+      dockerfile: deployment/Dockerfile
+      args:
+        SERVICE_DIR: currency-service
+        BUILD_TARGET: ./cmd/migrator/main.go
+        BINARY_NAME: migrator
     image: currency-migrator:latest
     container_name: currency-migrator
     environment:
@@ -39,8 +43,12 @@ services:
 
   currency-api:
     build:
-      context: ./currency-service
-      dockerfile: deployment/api.dockerfile
+      context: .
+      dockerfile: deployment/Dockerfile
+      args:
+        SERVICE_DIR: currency-service
+        BUILD_TARGET: ./cmd/api/main.go
+        BINARY_NAME: currency-api
     image: currency-api:latest
     container_name: currency_api
     ports:
@@ -64,8 +72,12 @@ services:
 
   currency-worker:
     build:
-      context: ./currency-service
-      dockerfile: deployment/worker.dockerfile
+      context: .
+      dockerfile: deployment/Dockerfile
+      args:
+        SERVICE_DIR: currency-service
+        BUILD_TARGET: ./cmd/worker/main.go
+        BINARY_NAME: currency-worker
     image: currency-worker:latest
     container_name: currency_worker
     environment:
@@ -86,8 +98,13 @@ services:
 
   auth-service:
     build:
-      context: ./auth-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: deployment/Dockerfile
+      args:
+        SERVICE_DIR: auth-service
+        BUILD_TARGET: ./main.go
+        BINARY_NAME: auth-service
+    image: auth-service:latest
     container_name: auth_service
     ports:
       - "8081:8081"
@@ -99,12 +116,16 @@ services:
 
   gateway:
     build:
-      context: ./gateway
-      dockerfile: deployment/gateway.dockerfile
+      context: .
+      dockerfile: deployment/Dockerfile
+      args:
+        SERVICE_DIR: gateway
+        BUILD_TARGET: ./cmd/gateway/main.go
+        BINARY_NAME: gateway
     image: gateway:latest
     container_name: gateway
     ports:
-      - "8080:8080"
+      - "8380:8080"
     environment:
       PORT: 8080
       CURRENCY_API_URL: http://currency-api:8082

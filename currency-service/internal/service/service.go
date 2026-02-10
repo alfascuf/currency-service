@@ -1,3 +1,4 @@
+//go:generate mockgen -source=service.go -destination=mocks/mock_service.go -package=mocks
 package service
 
 import (
@@ -184,6 +185,7 @@ func (s *service) calculateHistory(base, target string, startDate, endDate time.
 		}
 
 		// Invert each rate and swap base/target
+		var result []models.ExchangeRate
 		for i := range history {
 			// Check for zero rate
 			if history[i].Rate == 0 {
@@ -193,9 +195,11 @@ func (s *service) calculateHistory(base, target string, startDate, endDate time.
 			history[i].Base = base
 			history[i].Target = target
 			history[i].Rate = 1.0 / history[i].Rate
+
+			result = append(result, history[i])
 		}
 
-		return history, nil
+		return result, nil
 	}
 
 	// Case 3: Cross-conversion history (USD → EUR through RUB)
