@@ -1,7 +1,6 @@
+name: currency-exchange
+
 services:
-  # ============================================
-  # PostgreSQL Database
-  # ============================================
   postgres:
     image: postgres:16-alpine
     container_name: currency_db
@@ -24,8 +23,9 @@ services:
 
   migrator:
     build:
-      context: .
+      context: ./currency-service
       dockerfile: deployment/migrator.dockerfile
+    image: currency-migrator:latest
     container_name: currency-migrator
     environment:
       DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
@@ -33,16 +33,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"  # Запускается один раз
+    restart: "no"
     networks:
       - currency-network
-  # ============================================
-  # Currency API Service
-  # ============================================
+
   currency-api:
     build:
-      context: .
+      context: ./currency-service
       dockerfile: deployment/api.dockerfile
+    image: currency-api:latest
     container_name: currency_api
     ports:
       - "8082:8082"
@@ -54,21 +53,20 @@ services:
       DATABASE_DRIVER: postgres
       CURRENCY_API_URL: https://api.exchangerate-api.com/v4
       ENVIRONMENT: production
-
     depends_on:
       postgres:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - currency-network
 
-  # ============================================
-  # Currency Worker Service
-  # ============================================
   currency-worker:
     build:
-      context: .
+      context: ./currency-service
       dockerfile: deployment/worker.dockerfile
+    image: currency-worker:latest
     container_name: currency_worker
     environment:
       CURRENCY_API_URL: https://api.exchangerate-api.com/v4
@@ -77,24 +75,53 @@ services:
       DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
       DATABASE_DRIVER: postgres
       ENVIRONMENT: production
-
     depends_on:
       postgres:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks:
       - currency-network
 
-# ============================================
-# Volumes
-# ============================================
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth_service
+    ports:
+      - "8081:8081"
+    environment:
+      JWT_SECRET: my-production-secret-key-12345
+    restart: unless-stopped
+    networks:
+      - currency-network
+
+  gateway:
+    build:
+      context: ./gateway
+      dockerfile: deployment/gateway.dockerfile
+    image: gateway:latest
+    container_name: gateway
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      CURRENCY_API_URL: http://currency-api:8082
+      AUTH_API_URL: http://auth-service:8081
+      JWT_SECRET: my-production-secret-key-12345
+      ENVIRONMENT: production
+    depends_on:
+      - auth-service
+      - currency-api
+    restart: unless-stopped
+    networks:
+      - currency-network
+
 volumes:
   postgres_data:
     driver: local
 
-# ============================================
-# Networks
-# ============================================
 networks:
   currency-network:
     driver: bridge

@@ -5,7 +5,7 @@
 # ============================================
 FROM golang:1.25-alpine AS builder
 
-# Устанавливаем необходимые инструменты для сборки
+
 RUN apk add --no-cache git ca-certificates tzdata
 
 # Устанавливаем рабочую директорию
@@ -44,8 +44,6 @@ WORKDIR /app
 # Копируем бинарник из builder stage
 COPY --from=builder --chown=appuser:appgroup /app/bin/api /app/api
 
-# Копируем пример конфига (опционально)
-COPY --chown=appuser:appgroup .env.example /app/.env.example
 
 # Переключаемся на непривилегированного пользователя
 USER appuser
