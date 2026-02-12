@@ -21,6 +21,25 @@ services:
     networks:
       - currency-network
 
+  # ==================== REDIS ====================
+  redis:
+    image: redis:7-alpine
+    container_name: currency_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - currency-network
+  # ===============================================
+
   migrator:
     build:
       context: .
@@ -59,10 +78,18 @@ services:
       BASE_CURRENCY: RUB
       DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
       DATABASE_DRIVER: postgres
-      CURRENCY_API_URL: https://api.exchangerate-api.com/v4
+      CURRENCY_API_URL: "https://api.exchangerate-api.com/v4"
       ENVIRONMENT: production
+      # Redis configuration
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ""
+      REDIS_DB: "0"
+      CACHE_TTL: "3600"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
@@ -81,7 +108,7 @@ services:
     image: currency-worker:latest
     container_name: currency_worker
     environment:
-      CURRENCY_API_URL: https://api.exchangerate-api.com/v4
+      CURRENCY_API_URL: "https://api.exchangerate-api.com/v4"
       EXCHANGE_API_KEY: 9c6542ec9e89a700eaaf6a4d
       BASE_CURRENCY: RUB
       DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
@@ -141,6 +168,8 @@ services:
 
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:

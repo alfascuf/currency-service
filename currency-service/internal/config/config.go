@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -15,6 +16,13 @@ type Config struct {
 	DatabaseDriver string
 	CurrencyAPIURL string
 	Environment    string
+
+	// Redis configuration
+	RedisHost     string
+	RedisPort     string
+	RedisPassword string
+	RedisDB       int
+	CacheTTL      int
 }
 
 // Load reads configuration from environment variables and .env file
@@ -38,6 +46,12 @@ func Load() *Config {
 		DatabaseDriver: getEnv("DATABASE_DRIVER", "postgres"),
 		CurrencyAPIURL: getEnv("CURRENCY_API_URL", "https://api.frankfurter.dev"),
 		Environment:    getEnv("ENVIRONMENT", "development"),
+
+		RedisHost:     getEnv("REDIS_HOST", "localhost"),
+		RedisPort:     getEnv("REDIS_PORT", "6379"),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+		RedisDB:       getEnvAsInt("REDIS_DB", 0),
+		CacheTTL:      getEnvAsInt("CACHE_TTL", 3600),
 	}
 	return cfg
 }
@@ -48,4 +62,17 @@ func getEnv(key string, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getEnvAsInt helper for int
+func getEnvAsInt(key string, defaultValue int) int {
+	valueStr := getEnv(key, "")
+	if valueStr == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+	return value
 }

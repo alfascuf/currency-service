@@ -18,7 +18,7 @@ func TestService_GetRate(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRepository(ctrl)
-	svc := New(mockRepo)
+	svc := New(mockRepo, nil)
 
 	testDate := time.Date(2026, 2, 10, 0, 0, 0, 0, time.UTC)
 	dateStr := "2026-02-10"
@@ -200,7 +200,7 @@ func TestService_GetHistory(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRepository(ctrl)
-	svc := New(mockRepo)
+	svc := New(mockRepo, nil)
 
 	startDate := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2026, 2, 3, 0, 0, 0, 0, time.UTC)
@@ -385,7 +385,7 @@ func TestService_SaveRate(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRepository(ctrl)
-	svc := New(mockRepo)
+	svc := New(mockRepo, nil)
 
 	t.Run("успешное сохранение курса", func(t *testing.T) {
 		rate := &models.ExchangeRate{

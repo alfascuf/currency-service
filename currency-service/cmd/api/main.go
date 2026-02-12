@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/alfascuf/currency-service/internal/cache"
 	"github.com/alfascuf/currency-service/internal/config"
 	"github.com/alfascuf/currency-service/internal/handler"
 	"github.com/alfascuf/currency-service/internal/logger"
@@ -73,11 +74,35 @@ func main() {
 
 	logger.Log.Info("Connected to database successfully")
 
+	// REDIS
+	var redisCache cache.Cache
+	redisCache, err = cache.New(cfg)
+	if err != nil {
+		logger.Log.Warn("Failed to connect to Redis, continuing without cache",
+			zap.Error(err),
+			zap.String("redis_host", cfg.RedisHost),
+			zap.String("redis_port", cfg.RedisPort),
+		)
+		redisCache = nil // ← Продолжаем без кеша
+	} else {
+		logger.Log.Info("Redis cache initialized successfully",
+			zap.String("redis_host", cfg.RedisHost),
+			zap.String("redis_port", cfg.RedisPort),
+			zap.Int("cache_ttl_seconds", cfg.CacheTTL),
+		)
+		defer func() {
+			if err := redisCache.Close(); err != nil {
+				logger.Log.Error("Failed to close Redis connection", zap.Error(err))
+			}
+		}()
+	}
+
 	// 4. Initialize layers (repository, service, handler)
 	repo := repository.New(db)
 	logger.Log.Info("Database schema initialized")
 
-	svc := service.New(repo)
+	svc := service.New(repo, redisCache)
+	logger.Log.Info("Service initialized", zap.Bool("cache_enabled", redisCache != nil))
 	h := handler.New(svc)
 
 	// 5. Setup HTTP server
@@ -101,6 +126,7 @@ func main() {
 			zap.String("address", srv.Addr),
 			zap.Duration("read_timeout", serverReadTimeout),
 			zap.Duration("write_timeout", serverWriteTimeout),
+			zap.Bool("cache_enabled", redisCache != nil),
 		)
 
 		serverErrors <- srv.ListenAndServe()

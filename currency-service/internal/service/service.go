@@ -2,11 +2,15 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/alfascuf/currency-service/internal/cache"
+	"github.com/alfascuf/currency-service/internal/logger"
 	"github.com/alfascuf/currency-service/internal/models"
 	"github.com/alfascuf/currency-service/internal/repository"
+	"go.uber.org/zap"
 )
 
 const (
@@ -29,20 +33,26 @@ type Service interface {
 }
 
 type service struct {
-	repo repository.Repository
+	repo  repository.Repository
+	cache cache.Cache // Can be nil if Redis unavailable
 }
 
-// New creates a new Service instance
-func New(repo repository.Repository) Service {
-	return &service{repo: repo}
+// New creates a new Service instance with optional cache support
+func New(repo repository.Repository, cache cache.Cache) Service {
+	return &service{
+		repo:  repo,
+		cache: cache,
+	}
 }
 
 // GetRate calculates exchange rate for given currency pair and date.
 // It handles three cases:
 //  1. Same currency (returns 1.0)
-//  2. Direct rate from repository
+//  2. Direct rate from repository (with caching if available)
 //  3. Cross-rate calculation through base currency
 func (s *service) GetRate(req *models.GetRateRequest) (*models.GetRateResponse, error) {
+	ctx := context.Background()
+
 	// Special case: same currency
 	if req.Base == req.Target {
 		return &models.GetRateResponse{
@@ -53,18 +63,58 @@ func (s *service) GetRate(req *models.GetRateRequest) (*models.GetRateResponse, 
 		}, nil
 	}
 
+	// Try to get from cache first
+	if s.cache != nil {
+		cachedRate, err := s.cache.GetRate(ctx, req.Base, req.Target, req.Date)
+		if err == nil && cachedRate != nil {
+			logger.Log.Debug("Cache hit for rate",
+				zap.String("base", req.Base),
+				zap.String("target", req.Target),
+				zap.String("date", req.Date),
+			)
+			return &models.GetRateResponse{
+				Base:   cachedRate.Base,
+				Target: cachedRate.Target,
+				Rate:   cachedRate.Rate,
+				Date:   req.Date,
+			}, nil
+		}
+		// Cache miss or error - continue to database
+		if err != nil {
+			logger.Log.Debug("Cache miss or error",
+				zap.Error(err),
+				zap.String("base", req.Base),
+				zap.String("target", req.Target),
+			)
+		}
+	}
+
 	// Parse date (format already validated in handler)
 	date, err := time.Parse(dateFormat, req.Date)
 	if err != nil {
 		return nil, fmt.Errorf("invalid date format: %w", err)
 	}
 
-	// Calculate rate
+	// Calculate rate from database
 	rate, err := s.calculateRate(req.Base, req.Target, date)
 	if err != nil {
 		return &models.GetRateResponse{
 			Error: err.Error(),
 		}, nil
+	}
+
+	// Save to cache for future requests
+	if s.cache != nil {
+		cacheRate := &models.ExchangeRate{
+			Base:   req.Base,
+			Target: req.Target,
+			Rate:   rate,
+			Date:   date,
+		}
+		if err := s.cache.SetRate(ctx, cacheRate); err != nil {
+			logger.Log.Warn("Failed to cache rate", zap.Error(err))
+			// Don't fail the request if caching fails
+		}
 	}
 
 	return &models.GetRateResponse{
@@ -136,8 +186,27 @@ func (s *service) calculateRate(base, target string, date time.Time) (float64, e
 }
 
 // GetHistory returns historical exchange rates for given currency pair and date range.
-// It supports the same three conversion scenarios as GetRate.
+// It supports the same three conversion scenarios as GetRate (with caching if available).
 func (s *service) GetHistory(req *models.GetHistoryRequest) (*models.GetHistoryResponse, error) {
+	ctx := context.Background()
+
+	// Try to get from cache first
+	if s.cache != nil {
+		cachedHistory, err := s.cache.GetHistory(ctx, req.Base, req.Target, req.StartDate, req.EndDate)
+		if err == nil && cachedHistory != nil && len(cachedHistory) > 0 {
+			logger.Log.Debug("Cache hit for history",
+				zap.String("base", req.Base),
+				zap.String("target", req.Target),
+				zap.Int("count", len(cachedHistory)),
+			)
+			return &models.GetHistoryResponse{
+				Base:   req.Base,
+				Target: req.Target,
+				Data:   cachedHistory,
+			}, nil
+		}
+	}
+
 	// Parse dates (format already validated in handler)
 	startDate, err := time.Parse(dateFormat, req.StartDate)
 	if err != nil {
@@ -155,6 +224,14 @@ func (s *service) GetHistory(req *models.GetHistoryRequest) (*models.GetHistoryR
 		return &models.GetHistoryResponse{
 			Error: fmt.Sprintf("failed to get history: %v", err),
 		}, nil
+	}
+
+	// Save to cache for future requests
+	if s.cache != nil && len(history) > 0 {
+		if err := s.cache.SetHistory(ctx, req.Base, req.Target, req.StartDate, req.EndDate, history); err != nil {
+			logger.Log.Warn("Failed to cache history", zap.Error(err))
+			// Don't fail the request if caching fails
+		}
 	}
 
 	return &models.GetHistoryResponse{
