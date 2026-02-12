@@ -8,19 +8,27 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Port           string // HTTP server port
-	ExchangeApiKey string // External API key for currency rates
-	BaseCurrency   string // Base currency for conversions (e.g., RUB)
-	DatabaseURL    string // PostgreSQL connection string
-	DatabaseDriver string // Database driver name (postgres)
-	CurrencyAPIURL string // External currency API URL
-	Environment    string // Environment: development or production
+	Port           string
+	ExchangeApiKey string
+	BaseCurrency   string
+	DatabaseURL    string
+	DatabaseDriver string
+	CurrencyAPIURL string
+	Environment    string
 }
 
 // Load reads configuration from environment variables and .env file
 func Load() *Config {
-	// Try to load .env file (Ignore in docker)
-	_ = godotenv.Load(".env")
+	// Приоритет: .env.local (для локальной разработки)
+	if err := godotenv.Load(".env.local"); err != nil {
+		// Попробовать ../.env.local
+		if err := godotenv.Load("../.env.local"); err != nil {
+			// Fallback на обычный .env
+			if err := godotenv.Load(".env"); err != nil {
+				godotenv.Load("../.env")
+			}
+		}
+	}
 
 	cfg := &Config{
 		Port:           getEnv("PORT", "8080"),
@@ -38,7 +46,6 @@ func Load() *Config {
 func getEnv(key string, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
-
 	}
 	return defaultValue
 }

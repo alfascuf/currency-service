@@ -29,6 +29,7 @@ const (
 	dbMaxOpenConns    = 25
 	dbMaxIdleConns    = 5
 	dbConnMaxLifetime = 5 * time.Minute
+	dbPingTimeout     = 5 * time.Second
 )
 
 func main() {
@@ -63,7 +64,7 @@ func main() {
 	db.SetConnMaxLifetime(dbConnMaxLifetime)
 
 	// Verify database connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), dbPingTimeout)
 	defer cancel()
 
 	if err := db.PingContext(ctx); err != nil {

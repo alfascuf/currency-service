@@ -133,3 +133,17 @@ docker-ps:
 # ============================================
 check-all: lint-all test-all
 	@echo "All quality checks passed!"
+
+.PHONY: test
+test:
+	cd currency-service && go test -v ./internal/...
+
+.PHONY: test-coverage
+test-coverage:
+	cd currency-service && go test -v -coverprofile=coverage.out ./internal/...
+	cd currency-service && go tool cover -html=coverage.out -o coverage.html
+	@echo Coverage report generated: currency-service/coverage.html
+
+.PHONY: test-short
+test-short:
+	cd currency-service && go test -short ./internal/...
