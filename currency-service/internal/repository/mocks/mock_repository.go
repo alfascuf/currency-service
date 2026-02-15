@@ -13,7 +13,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	models "github.com/alfascuf/currency-service/internal/models"
+	models "github.com/alfascuf/PROD1/currency-service/internal/models"
 	gomock "go.uber.org/mock/gomock"
 )
 

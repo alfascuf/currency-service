@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alfascuf/currency-service/internal/logger"
+	"github.com/alfascuf/PROD1/currency-service/internal/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
-	"github.com/alfascuf/currency-service/internal/models"
-	"github.com/alfascuf/currency-service/internal/service/mocks"
+	"github.com/alfascuf/PROD1/currency-service/internal/models"
+	"github.com/alfascuf/PROD1/currency-service/internal/service/mocks"
 )
 
 // init инициализирует logger для тестов

@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/alfascuf/gateway/internal/config"
-	"github.com/alfascuf/gateway/internal/models"
-	"github.com/alfascuf/gateway/internal/repository"
+	"github.com/alfascuf/PROD1/gateway/internal/config"
+	"github.com/alfascuf/PROD1/gateway/internal/models"
+	"github.com/alfascuf/PROD1/gateway/internal/repository"
 	"github.com/golang-jwt/jwt/v5"
 )
 

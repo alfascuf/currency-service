@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alfascuf/currency-service/internal/config"
-	"github.com/alfascuf/currency-service/internal/logger"
-	"github.com/alfascuf/currency-service/internal/migrations"
+	"github.com/alfascuf/PROD1/currency-service/internal/config"
+	"github.com/alfascuf/PROD1/currency-service/internal/logger"
+	"github.com/alfascuf/PROD1/currency-service/internal/migrations"
 	_ "github.com/lib/pq"
 	"go.uber.org/zap"
 )

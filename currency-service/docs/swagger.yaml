@@ -1,0 +1,153 @@
+basePath: /api/v1
+definitions:
+  github_com_alfascuf_PROD1_currency-service_internal_models.ExchangeRate:
+    properties:
+      base:
+        type: string
+      created_at:
+        type: string
+      date:
+        type: string
+      id:
+        type: integer
+      rate:
+        type: number
+      target:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_alfascuf_PROD1_currency-service_internal_models.GetHistoryResponse:
+    properties:
+      base:
+        type: string
+      data:
+        items:
+          $ref: '#/definitions/github_com_alfascuf_PROD1_currency-service_internal_models.ExchangeRate'
+        type: array
+      error:
+        type: string
+      target:
+        type: string
+    type: object
+  github_com_alfascuf_PROD1_currency-service_internal_models.GetRateResponse:
+    properties:
+      base:
+        type: string
+      date:
+        type: string
+      error:
+        type: string
+      rate:
+        type: number
+      target:
+        type: string
+    type: object
+host: localhost:8082
+info:
+  contact:
+    email: support@currency-api.com
+    name: API Support
+  description: API для получения курсов валют с поддержкой gRPC и HTTP
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Currency Exchange API
+  version: "1.0"
+paths:
+  /api/v1/rates:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает курс обмена между двумя валютами на указанную дату
+      parameters:
+      - description: 'Базовая валюта (например: USD, RUB, EUR)'
+        in: query
+        name: base
+        required: true
+        type: string
+      - description: 'Целевая валюта (например: USD, RUB, EUR)'
+        in: query
+        name: target
+        required: true
+        type: string
+      - description: 'Дата в формате YYYY-MM-DD (например: 2026-02-15)'
+        in: query
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alfascuf_PROD1_currency-service_internal_models.GetRateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_alfascuf_PROD1_currency-service_internal_models.GetRateResponse'
+      summary: Получить курс валюты
+      tags:
+      - rates
+  /api/v1/rates/history:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает исторические данные курсов обмена между двумя валютами
+        за указанный период
+      parameters:
+      - description: 'Базовая валюта (например: USD, RUB, EUR)'
+        in: query
+        name: base
+        required: true
+        type: string
+      - description: 'Целевая валюта (например: USD, RUB, EUR)'
+        in: query
+        name: target
+        required: true
+        type: string
+      - description: Начальная дата в формате YYYY-MM-DD
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: Конечная дата в формате YYYY-MM-DD
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alfascuf_PROD1_currency-service_internal_models.GetHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_alfascuf_PROD1_currency-service_internal_models.GetHistoryResponse'
+      summary: Получить историю курсов
+      tags:
+      - rates
+  /health:
+    get:
+      description: Проверка состояния API
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - health
+schemes:
+- http
+- https
+swagger: "2.0"

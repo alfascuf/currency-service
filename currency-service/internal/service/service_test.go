@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/alfascuf/currency-service/internal/models"
-	"github.com/alfascuf/currency-service/internal/repository/mocks"
+	"github.com/alfascuf/PROD1/currency-service/internal/models"
+	"github.com/alfascuf/PROD1/currency-service/internal/repository/mocks"
 )
 
 func TestService_GetRate(t *testing.T) {

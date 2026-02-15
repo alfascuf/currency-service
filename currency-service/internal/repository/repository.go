@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/alfascuf/currency-service/internal/models"
+	"github.com/alfascuf/PROD1/currency-service/internal/models"
 	_ "github.com/lib/pq"
 )
 

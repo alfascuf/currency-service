@@ -8,11 +8,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alfascuf/gateway/internal/config"
-	"github.com/alfascuf/gateway/internal/handler"
-	"github.com/alfascuf/gateway/internal/middleware"
-	"github.com/alfascuf/gateway/internal/repository"
-	"github.com/alfascuf/gateway/internal/service"
+	"github.com/alfascuf/PROD1/gateway/internal/clients/currency"
+	"github.com/alfascuf/PROD1/gateway/internal/config"
+	"github.com/alfascuf/PROD1/gateway/internal/handler"
+	"github.com/alfascuf/PROD1/gateway/internal/middleware"
+	"github.com/alfascuf/PROD1/gateway/internal/repository"
+	"github.com/alfascuf/PROD1/gateway/internal/service"
 	"go.uber.org/zap"
 )
 
@@ -46,23 +47,37 @@ func main() {
 	logger.Info("Starting Gateway Service",
 		zap.String("port", cfg.Port),
 		zap.String("environment", cfg.Environment),
-		zap.String("currency_api_url", cfg.CurrencyAPIURL),
+		zap.String("currency_grpc_address", cfg.CurrencyGRPCAddress), // ← Изменено
 		zap.String("auth_api_url", cfg.AuthAPIURL),
 	)
 
-	// 3. Init layers (repository, service, handler)
+	// 3. Connect to Currency Service via gRPC
+	currencyClient, err := currency.NewClient(cfg.CurrencyGRPCAddress)
+	if err != nil {
+		logger.Fatal("Failed to connect to currency service",
+			zap.Error(err),
+			zap.String("address", cfg.CurrencyGRPCAddress),
+		)
+	}
+	defer currencyClient.Close()
+
+	logger.Info("✓ Connected to Currency Service (gRPC)",
+		zap.String("address", cfg.CurrencyGRPCAddress),
+	)
+
+	// 4. Init layers (repository, service, handler)
 	userRepo := repository.NewUserRepository()
 	logger.Info("User repository initialized with test users")
 
 	authService := service.NewAuthService(cfg, userRepo)
-	currencyService := service.NewCurrencyService(cfg)
+	currencyService := service.NewCurrencyService(currencyClient) // ← Передаем gRPC клиент
 	logger.Info("Services initialized")
 
 	authHandler := handler.NewAuthHandler(authService, logger)
 	currencyHandler := handler.NewCurrencyHandler(currencyService, logger)
 	logger.Info("Handlers initialized")
 
-	// 4. Set HTTP routes
+	// 5. Set HTTP routes
 	mux := http.NewServeMux()
 
 	// Health check endpoint
@@ -81,7 +96,7 @@ func main() {
 	mux.Handle("/api/rates", authMiddleware(http.HandlerFunc(currencyHandler.GetRate)))
 	mux.Handle("/api/rates/history", authMiddleware(http.HandlerFunc(currencyHandler.GetHistory)))
 
-	// 5. Set HTTP server
+	// 6. Set HTTP server
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      loggingMiddleware(logger)(mux),
@@ -90,7 +105,7 @@ func main() {
 		IdleTimeout:  serverIdleTimeout,
 	}
 
-	// 6. Start server in go()
+	// 7. Start server in go()
 	serverErrors := make(chan error, 1)
 	go func() {
 		logger.Info("Gateway server started",
@@ -102,7 +117,7 @@ func main() {
 		serverErrors <- srv.ListenAndServe()
 	}()
 
-	// 7. Wait for signal stop or server err
+	// 8. Wait for signal stop or server err
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -113,6 +128,7 @@ func main() {
 		logger.Info("Shutdown signal received", zap.String("signal", sig.String()))
 	}
 
+	// 9. Graceful shutdown
 	logger.Info("Shutting down server...")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), serverShutdownTimeout)

@@ -71,15 +71,23 @@ services:
     image: currency-api:latest
     container_name: currency_api
     ports:
-      - "8082:8082"
+      - "8082:8082"   # HTTP REST API
+      - "50051:50051" # ← gRPC API (добавлено)
     environment:
+      # Server ports
       PORT: 8082
+      GRPC_PORT: 50051 # ← Добавлено
+
+      # API configuration
       EXCHANGE_API_KEY: 9c6542ec9e89a700eaaf6a4d
       BASE_CURRENCY: RUB
-      DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
-      DATABASE_DRIVER: postgres
       CURRENCY_API_URL: "https://api.exchangerate-api.com/v4"
       ENVIRONMENT: production
+
+      # Database
+      DATABASE_URL: postgres://postgres:90029002@postgres:5432/currency_db?sslmode=disable
+      DATABASE_DRIVER: postgres
+
       # Redis configuration
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -96,6 +104,12 @@ services:
     restart: unless-stopped
     networks:
       - currency-network
+    healthcheck: # ← Добавлен healthcheck
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   currency-worker:
     build:
@@ -155,13 +169,21 @@ services:
       - "8380:8080"
     environment:
       PORT: 8080
-      CURRENCY_API_URL: http://currency-api:8082
+
+      # Currency service endpoints
+      CURRENCY_API_URL: http://currency-api:8082              # HTTP (для обратной совместимости)
+      CURRENCY_GRPC_ADDRESS: currency-api:50051               # ← gRPC (добавлено)
+
+      # Auth service
       AUTH_API_URL: http://auth-service:8081
+
       JWT_SECRET: my-production-secret-key-12345
       ENVIRONMENT: production
     depends_on:
-      - auth-service
-      - currency-api
+      auth-service:
+        condition: service_started
+      currency-api:
+        condition: service_healthy # ← Ждем здоровья currency-api
     restart: unless-stopped
     networks:
       - currency-network

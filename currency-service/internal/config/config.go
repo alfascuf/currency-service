@@ -9,13 +9,19 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	Port           string
+	// Server ports
+	Port     string
+	GRPCPort string // ← Добавлено для gRPC
+
+	// External API
 	ExchangeApiKey string
 	BaseCurrency   string
-	DatabaseURL    string
-	DatabaseDriver string
 	CurrencyAPIURL string
 	Environment    string
+
+	// Database
+	DatabaseURL    string
+	DatabaseDriver string
 
 	// Redis configuration
 	RedisHost     string
@@ -39,14 +45,21 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		Port:           getEnv("PORT", "8080"),
+		// Server
+		Port:     getEnv("PORT", "8082"),
+		GRPCPort: getEnv("GRPC_PORT", "50051"), // ← Добавлено
+
+		// External API
 		ExchangeApiKey: getEnv("EXCHANGE_API_KEY", ""),
 		BaseCurrency:   getEnv("BASE_CURRENCY", "USD"),
-		DatabaseURL:    getEnv("DATABASE_URL", "currency.db"),
-		DatabaseDriver: getEnv("DATABASE_DRIVER", "postgres"),
 		CurrencyAPIURL: getEnv("CURRENCY_API_URL", "https://api.frankfurter.dev"),
 		Environment:    getEnv("ENVIRONMENT", "development"),
 
+		// Database
+		DatabaseURL:    getEnv("DATABASE_URL", "currency.db"),
+		DatabaseDriver: getEnv("DATABASE_DRIVER", "postgres"),
+
+		// Redis
 		RedisHost:     getEnv("REDIS_HOST", "localhost"),
 		RedisPort:     getEnv("REDIS_PORT", "6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),

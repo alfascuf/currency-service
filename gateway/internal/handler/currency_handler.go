@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alfascuf/gateway/internal/middleware"
-	"github.com/alfascuf/gateway/internal/models"
-	"github.com/alfascuf/gateway/internal/service"
+	"github.com/alfascuf/PROD1/gateway/internal/middleware"
+	"github.com/alfascuf/PROD1/gateway/internal/models"
+	"github.com/alfascuf/PROD1/gateway/internal/service"
 	"go.uber.org/zap"
 )
 

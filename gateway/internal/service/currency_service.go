@@ -1,15 +1,12 @@
 package service
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"time"
 
-	"github.com/alfascuf/gateway/internal/config"
-	"github.com/alfascuf/gateway/internal/models"
+	"github.com/alfascuf/PROD1/gateway/internal/clients/currency"
+	"github.com/alfascuf/PROD1/gateway/internal/models"
 )
 
 // CurrencyService interface for currency working
@@ -19,107 +16,75 @@ type CurrencyService interface {
 }
 
 type currencyService struct {
-	currencyAPIURL string
-	httpClient     *http.Client
+	grpcClient *currency.Client
 }
 
-// NewCurrencyService создаёт create service to work with Currency API
-func NewCurrencyService(cfg *config.Config) CurrencyService {
+// NewCurrencyService создаёт create service to work with Currency API via gRPC
+func NewCurrencyService(grpcClient *currency.Client) CurrencyService {
 	return &currencyService{
-		currencyAPIURL: cfg.CurrencyAPIURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		grpcClient: grpcClient,
 	}
 }
 
-// GetRate get currency from Currency Service
+// GetRate get currency from Currency Service via gRPC
 func (s *currencyService) GetRate(req *models.CurrencyRateRequest) (*models.CurrencyRateResponse, error) {
-	// Form URL with query param
-	baseURL := fmt.Sprintf("%s/api/v1/rates", s.currencyAPIURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	params := url.Values{}
-	params.Add("base", req.Base)
-	params.Add("target", req.Target)
-	params.Add("date", req.Date)
-
-	fullURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
-
-	// Create HTTP request
-	httpReq, err := http.NewRequest(http.MethodGet, fullURL, nil)
+	// Вызов gRPC метода
+	resp, err := s.grpcClient.GetRate(ctx, req.Base, req.Target, req.Date)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("grpc call failed: %w", err)
 	}
 
-	// Send request
-	resp, err := s.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call currency service: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	// Если сервис вернул бизнес-ошибку
+	if resp.Error != "" {
+		return &models.CurrencyRateResponse{
+			Error: resp.Error,
+		}, nil
 	}
 
-	// Parse JSON
-	var currencyResp models.CurrencyRateResponse
-	if err := json.Unmarshal(body, &currencyResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	// If Currency Service returned err in response
-	if currencyResp.Error != "" {
-		return &currencyResp, nil
-	}
-
-	return &currencyResp, nil
+	// Успешный ответ
+	return &models.CurrencyRateResponse{
+		Base:   resp.Base,
+		Target: resp.Target,
+		Rate:   resp.Rate,
+		Date:   resp.Date,
+	}, nil
 }
 
-// GetHistory get history of currencies from Currency Service
+// GetHistory get history of currencies from Currency Service via gRPC
 func (s *currencyService) GetHistory(req *models.HistoryRequest) (*models.HistoryResponse, error) {
-	// Form URL with query params
-	baseURL := fmt.Sprintf("%s/api/v1/rates/history", s.currencyAPIURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	params := url.Values{}
-	params.Add("base", req.Base)
-	params.Add("target", req.Target)
-	params.Add("start_date", req.StartDate)
-	params.Add("end_date", req.EndDate)
-
-	fullURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
-
-	// Create HTTP request
-	httpReq, err := http.NewRequest(http.MethodGet, fullURL, nil)
+	// Вызов gRPC метода
+	resp, err := s.grpcClient.GetHistory(ctx, req.Base, req.Target, req.StartDate, req.EndDate)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("grpc call failed: %w", err)
 	}
 
-	// send req
-	resp, err := s.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to call currency service: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read resp
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+	// Если сервис вернул бизнес-ошибку
+	if resp.Error != "" {
+		return &models.HistoryResponse{
+			Error: resp.Error,
+		}, nil
 	}
 
-	// Parse JSON
-	var historyResp models.HistoryResponse
-	if err := json.Unmarshal(body, &historyResp); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	// Конвертируем protobuf в модели Gateway (только 4 поля)
+	rates := make([]models.ExchangeRate, len(resp.Data))
+	for i, rate := range resp.Data {
+		rates[i] = models.ExchangeRate{
+			Base:   rate.Base,
+			Target: rate.Target,
+			Rate:   rate.Rate,
+			Date:   rate.Date.AsTime().Format("2006-01-02"),
+		}
 	}
 
-	// If Currency Service return err in response
-	if historyResp.Error != "" {
-		return &historyResp, nil
-	}
-
-	return &historyResp, nil
+	return &models.HistoryResponse{
+		Base:   resp.Base,
+		Target: resp.Target,
+		Data:   rates,
+	}, nil
 }

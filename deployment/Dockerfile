@@ -3,29 +3,44 @@
 # ============================================
 # Используется для: currency-api, currency-worker, gateway, auth-service
 
-FROM golang:1.25.1-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
 
-ARG SERVICE_DIR
-COPY ${SERVICE_DIR}/go.mod ${SERVICE_DIR}/go.sum ./
+# Установка зависимостей для сборки
+RUN apk add --no-cache git
+
+# ============================================
+# ВАЖНО: Копируем go.mod/go.sum из КОРНЯ проекта
+# ============================================
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY ${SERVICE_DIR} ./
+# ============================================
+# Копируем ВСЁ содержимое проекта
+# Это нужно для доступа к pkg/grpc/pb (общие proto-файлы)
+# ============================================
+COPY . .
 
+# Сборка бинарника из конкретного сервиса
+ARG SERVICE_DIR
 ARG BUILD_TARGET
 ARG BINARY_NAME=app
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-s -w" \
     -o /app/${BINARY_NAME} \
-    ${BUILD_TARGET}
+    ./${SERVICE_DIR}/${BUILD_TARGET}
 
+# ============================================
+# Runtime stage
+# ============================================
 FROM alpine:3.19
 
-RUN apk --no-cache add ca-certificates tzdata
+# Установка зависимостей (wget для healthcheck)
+RUN apk --no-cache add ca-certificates tzdata wget
 
-# Создаём пользователя (опционально, для production)
+# Создаём пользователя для безопасности
 RUN addgroup -g 1000 appgroup && \
     adduser -D -u 1000 -G appgroup appuser
 
@@ -37,5 +52,6 @@ COPY --from=builder --chown=appuser:appgroup /app/${BINARY_NAME} /app/service
 USER appuser
 
 EXPOSE 8080
+EXPOSE 50051
 
 CMD ["/app/service"]

@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package currency;
+
+option go_package = "github.com/alfascuf/PROD1/pkg/grpc/pb";
+
+import "google/protobuf/timestamp.proto";
+
+// CurrencyService предоставляет методы для работы с курсами валют
+service CurrencyService {
+  // GetRate возвращает курс обмена между двумя валютами
+  rpc GetRate(GetRateRequest) returns (GetRateResponse);
+
+  // GetHistory возвращает исторические данные курсов
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+
+  // HealthCheck проверяет состояние сервиса
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// GetRateRequest запрос курса валюты
+message GetRateRequest {
+  string base = 1;    // Базовая валюта (например: USD, RUB)
+  string target = 2;  // Целевая валюта (например: EUR, JPY)
+  string date = 3;    // Дата в формате YYYY-MM-DD
+}
+
+// GetRateResponse ответ с курсом валюты
+message GetRateResponse {
+  string base = 1;
+  string target = 2;
+  double rate = 3;
+  string date = 4;
+  string error = 5;  // Опциональная ошибка
+}
+
+// GetHistoryRequest запрос истории курсов
+message GetHistoryRequest {
+  string base = 1;
+  string target = 2;
+  string start_date = 3;
+  string end_date = 4;
+}
+
+// GetHistoryResponse ответ с историческими данными
+message GetHistoryResponse {
+  string base = 1;
+  string target = 2;
+  repeated ExchangeRate data = 3;
+  string error = 4;
+}
+
+// ExchangeRate представляет курс валюты
+message ExchangeRate {
+  int64 id = 1;
+  string base = 2;
+  string target = 3;
+  double rate = 4;
+  google.protobuf.Timestamp date = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// HealthCheckRequest запрос проверки здоровья сервиса
+message HealthCheckRequest {}
+
+// HealthCheckResponse ответ о состоянии сервиса
+message HealthCheckResponse {
+  string status = 1;
+  string time = 2;
+}

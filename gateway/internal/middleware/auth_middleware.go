@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alfascuf/gateway/internal/service"
+	"github.com/alfascuf/PROD1/gateway/internal/service"
 )
 
 // contextKey - type for key context

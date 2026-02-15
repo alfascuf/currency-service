@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/alfascuf/currency-service/internal/logger"
-	"github.com/alfascuf/currency-service/internal/models"
-	"github.com/alfascuf/currency-service/internal/service"
-	customValidator "github.com/alfascuf/currency-service/internal/validator"
+	"github.com/alfascuf/PROD1/currency-service/internal/logger"
+	"github.com/alfascuf/PROD1/currency-service/internal/models"
+	"github.com/alfascuf/PROD1/currency-service/internal/service"
+	customValidator "github.com/alfascuf/PROD1/currency-service/internal/validator"
 	"go.uber.org/zap"
 )
 
@@ -22,19 +22,30 @@ func New(srv service.Service) *Handler {
 	return &Handler{srv: srv}
 }
 
-// Health checks if the service is running
+// Health godoc
+// @Summary      Health check
+// @Description  Проверка состояния API
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Router       /health [get]
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("OK"))
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-// GetRate returns exchange rate for given currency pair and date.
-// Query parameters:
-//   - base: source currency code (3 letters, e.g. RUB)
-//   - target: target currency code (3 letters, e.g. USD)
-//   - date: date in format YYYY-MM-DD (e.g. 2026-02-02)
-//
-// Returns JSON with rate or error message
+// GetRate godoc
+// @Summary      Получить курс валюты
+// @Description  Возвращает курс обмена между двумя валютами на указанную дату
+// @Tags         rates
+// @Accept       json
+// @Produce      json
+// @Param        base    query     string  true  "Базовая валюта (например: USD, RUB, EUR)"
+// @Param        target  query     string  true  "Целевая валюта (например: USD, RUB, EUR)"
+// @Param        date    query     string  true  "Дата в формате YYYY-MM-DD (например: 2026-02-15)"
+// @Success      200  {object}  models.GetRateResponse
+// @Failure      400  {object}  models.GetRateResponse
+// @Router       /api/v1/rates [get]
 func (h *Handler) GetRate(w http.ResponseWriter, r *http.Request) {
 	// Парсим query параметры
 	req := &models.GetRateRequest{
@@ -95,14 +106,19 @@ func (h *Handler) GetRate(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// GetHistory returns historical exchange rates for given currency pair and date range.
-// Query parameters:
-//   - base: source currency code (3 letters, e.g. RUB)
-//   - target: target currency code (3 letters, e.g. USD)
-//   - start_date: start date in format YYYY-MM-DD
-//   - end_date: end date in format YYYY-MM-DD
-//
-// Returns JSON array with rates or error message
+// GetHistory godoc
+// @Summary      Получить историю курсов
+// @Description  Возвращает исторические данные курсов обмена между двумя валютами за указанный период
+// @Tags         rates
+// @Accept       json
+// @Produce      json
+// @Param        base         query     string  true  "Базовая валюта (например: USD, RUB, EUR)"
+// @Param        target       query     string  true  "Целевая валюта (например: USD, RUB, EUR)"
+// @Param        start_date   query     string  true  "Начальная дата в формате YYYY-MM-DD"
+// @Param        end_date     query     string  true  "Конечная дата в формате YYYY-MM-DD"
+// @Success      200  {object}  models.GetHistoryResponse
+// @Failure      400  {object}  models.GetHistoryResponse
+// @Router       /api/v1/rates/history [get]
 func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 	// Парсим query параметры
 	req := &models.GetHistoryRequest{

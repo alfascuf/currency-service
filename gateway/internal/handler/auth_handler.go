@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/alfascuf/gateway/internal/models"
-	"github.com/alfascuf/gateway/internal/service"
+	"github.com/alfascuf/PROD1/gateway/internal/models"
+	"github.com/alfascuf/PROD1/gateway/internal/service"
 	"go.uber.org/zap"
 )
 

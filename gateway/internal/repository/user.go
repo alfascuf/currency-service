@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/alfascuf/gateway/internal/models"
+	"github.com/alfascuf/PROD1/gateway/internal/models"
 )
 
 // UserRepository interface to work with user

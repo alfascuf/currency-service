@@ -42,6 +42,11 @@ Thumbs.db
 # Logs
 *.log
 
+# Swagger docs (можно регенерировать)
+docs/docs.go
+docs/swagger.json
+docs/swagger.yaml
+
 ## Compiled binaries
 #currency-service/
 #gateway/

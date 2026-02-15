@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/alfascuf/currency-service/internal/models"
+	"github.com/alfascuf/PROD1/currency-service/internal/models"
 )
 
 func TestRepository_SaveRate(t *testing.T) {
